@@ -1,0 +1,7 @@
+
+apiVersion: v2
+name: application-generator
+description: A Helm chart for the ArgoCD Application Generator
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

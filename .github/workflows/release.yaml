@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push-image:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  chart-release:
+    name: Package and Push Helm Chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Get owner (lowercase)
+        id: get_owner
+        run: |
+          OWNER=${{ github.repository_owner }}
+          echo "owner=${OWNER,,}" >> $GITHUB_OUTPUT
+
+      - name: Package and Push Chart
+        env:
+            HELM_EXPERIMENTAL_OCI: 1
+        run: |
+          CHART_VERSION="${{ github.event.release.tag_name }}"
+          # Strip 'v' prefix if present for SemVer compliance in Helm
+          CHART_VERSION="${CHART_VERSION#v}"
+          
+          echo "Packaging chart version $CHART_VERSION"
+          
+          # Package the chart, overriding version and appVersion
+          helm package charts/application-generator --version "$CHART_VERSION" --app-version "$CHART_VERSION"
+          
+          # Push to OCI registry
+          # Note: OCI registry path for charts typically requires a 'charts' namespace or similar convention in GHCR
+          # Using ghcr.io/<owner>/charts as the repository prefix
+          
+          echo "Pushing chart to oci://${{ env.REGISTRY }}/${{ steps.get_owner.outputs.owner }}/charts"
+          
+          helm push application-generator-"$CHART_VERSION".tgz oci://${{ env.REGISTRY }}/${{ steps.get_owner.outputs.owner }}/charts

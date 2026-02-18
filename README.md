@@ -1,36 +1,126 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+# ArgoCD Manifest Generator
 
-First, run the development server:
+A modern, premium web application for managing ArgoCD Application manifests directly in your Git repositories. Built with Next.js 14, Tailwind CSS, and NextAuth.js.
+
+## 🚀 Features
+
+- **Multi-Provider Authentication**: Seamless login with GitHub and GitLab.
+- **Repository Scanning**: Automatically discovers ArgoCD Application manifests in your repositories.
+- **Visual Dashboard**: View all your applications in a card-based layout.
+- **Direct Git Operations**: Creates, updates, and deletes manifests directly in your Git provider without needing a local clone.
+- **Form-Based Editor**: User-friendly form abstraction over raw YAML editing.
+- **Deploy Ready**: Includes Dockerfile and Helm Chart for production deployment.
+
+## 🛠️ Tech Stack
+
+- **Framework**: [Next.js 14](https://nextjs.org/) (App Router)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **Auth**: [NextAuth.js](https://next-auth.js.org/)
+- **Git Integration**: [Octokit](https://github.com/octokit/octokit.js) & [GitBeaker](https://github.com/jdalrymple/gitbeaker)
+- **Icons**: [Lucide React](https://lucide.dev/)
+
+## 📦 Getting Started
+
+### Prerequisites
+- Node.js 18+
+- A GitHub OAuth App and/or GitLab Application for authentication.
+
+### Obtaining OAuth Credentials
+
+#### GitHub
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers).
+2. Click **New OAuth App**.
+3. Set **Homepage URL** to `http://localhost:3000`.
+4. Set **Authorization callback URL** to `http://localhost:3000/api/auth/callback/github`.
+5. Register and copy the **Client ID** and **Client Secret**.
+
+#### GitLab
+1. Go to [GitLab Applications](https://gitlab.com/-/profile/applications).
+2. Add a new application.
+3. Set **Redirect URI** to `http://localhost:3000/api/auth/callback/gitlab`.
+4. Select scopes `api` and `read_user`.
+5. Save and copy the **Application ID** and **Secret**.
+
+### Local Development
+
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/yourusername/application-generator.git
+    cd application-generator
+    ```
+
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    ```
+
+3.  **Configure Environment Variables**:
+    Create a `.env.local` file in the root directory:
+    ```bash
+    # NextAuth Configuration
+    NEXTAUTH_URL=http://localhost:3000
+    # NextAuth Configuration
+    NEXTAUTH_URL=http://localhost:3000
+    # Generate a secret with: openssl rand -base64 32
+    NEXTAUTH_SECRET=changeme
+
+    # GitHub Provider (Optional)
+    GITHUB_ID=your-github-client-id
+    GITHUB_SECRET=your-github-client-secret
+
+    # GitLab Provider (Optional)
+    GITLAB_ID=your-gitlab-app-id
+    GITLAB_SECRET=your-gitlab-app-secret
+    GITLAB_BASE_URL=https://gitlab.example.com # Optional: For self-hosted GitLab
+    ```
+
+4.  **Run the application**:
+    ```bash
+    npm run dev
+    ```
+    Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 🐳 Docker Deployment
+
+Build the container image:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+docker build -t application-generator:latest .
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Run the container:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+docker run -p 3000:3000 \
+  -e NEXTAUTH_SECRET=your-secret \
+  -e NEXTAUTH_URL=http://localhost:3000 \
+  -e GITHUB_ID=... \
+  -e GITHUB_SECRET=... \
+  application-generator:latest
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ☸️ Kubernetes Deployment (Helm)
 
-## Learn More
+A Helm chart is included in `charts/application-generator`.
 
-To learn more about Next.js, take a look at the following resources:
+1.  **Install the chart**:
+    ```bash
+    helm upgrade --install my-app-generator ./charts/application-generator \
+      --namespace argocd-tools --create-namespace \
+      --set auth.nextAuthUrl=https://generator.example.com \
+      --set auth.nextAuthSecret=your-secret \
+      --set auth.github.id=your-id \
+      --set auth.github.secret=your-secret
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2.  **Configuration**:
+    See `charts/application-generator/values.yaml` for full configuration options including Ingress, Resources, and Autoscaling.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🤝 Contributing
 
-## Deploy on Vercel
+Contributions are welcome! Please open an issue or submit a pull request.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📄 License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
