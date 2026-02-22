@@ -2,17 +2,22 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { GitBranch, FolderGit2, Search } from "lucide-react";
+import { GitBranch, FolderGit2, Search, ChevronDown } from "lucide-react";
 import type { Repository } from "@/lib/git";
+
+const PAGE_SIZE = 30;
 
 export default function RepoList({ repos }: { repos: Repository[] }) {
   const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const filtered = repos.filter(
     (r) =>
       r.name.toLowerCase().includes(query.toLowerCase()) ||
       r.fullName.toLowerCase().includes(query.toLowerCase())
   );
+
+  const visible = filtered.slice(0, visibleCount);
 
   return (
     <>
@@ -30,12 +35,12 @@ export default function RepoList({ repos }: { repos: Repository[] }) {
       </div>
 
       <main className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.length === 0 ? (
+        {visible.length === 0 ? (
           <p className="text-gray-500 col-span-3 text-center py-12">
             No repositories match &ldquo;{query}&rdquo;
           </p>
         ) : (
-          filtered.map((repo) => (
+          visible.map((repo) => (
             <Link
               key={repo.fullName}
               href={`/dashboard/${encodeURIComponent(repo.fullName)}`}
@@ -65,6 +70,18 @@ export default function RepoList({ repos }: { repos: Repository[] }) {
           ))
         )}
       </main>
+
+      {filtered.length > visibleCount && (
+        <div className="max-w-7xl mx-auto mt-8 flex justify-center">
+          <button
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white px-6 py-2.5 rounded-lg transition-colors text-sm"
+          >
+            <ChevronDown className="w-4 h-4" />
+            Load more ({filtered.length - visibleCount} remaining)
+          </button>
+        </div>
+      )}
     </>
   );
 }

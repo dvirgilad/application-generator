@@ -50,7 +50,7 @@ export default async function EditAppPage({
       <header className="mb-10 max-w-7xl mx-auto border-b border-gray-800 pb-6">
         <Link
           href={`/dashboard/${encodeURIComponent(repoFullName)}`}
-          className="text-gray-400 hover:text-white transition-colors flex items-center gap-2 mb-4"
+          className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-all duration-150 active:scale-95 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Applications

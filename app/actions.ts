@@ -22,6 +22,7 @@ export async function saveApplication(repo: string, path: string, content: any, 
 
   await provider.saveFile(repo, path, yamlContent, message);
   revalidatePath(`/dashboard/${encodeURIComponent(repo)}`);
+  revalidatePath(`/dashboard/${encodeURIComponent(repo)}`, "page");
 }
 
 export async function deleteApplication(repo: string, path: string) {
@@ -33,4 +34,5 @@ export async function deleteApplication(repo: string, path: string) {
   const provider = getGitProvider(session.accessToken as string, session.provider as string);
   await provider.deleteFile(repo, path, `Delete application at ${path}`);
   revalidatePath(`/dashboard/${encodeURIComponent(repo)}`);
+  revalidatePath(`/dashboard/${encodeURIComponent(repo)}`, "page");
 }
