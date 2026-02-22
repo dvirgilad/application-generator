@@ -5,7 +5,9 @@ import { getGitProvider } from "@/lib/git";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import yaml from "js-yaml";
-import { Plus, ArrowLeft, Settings, Trash2, ExternalLink } from "lucide-react";
+import { Plus, ArrowLeft, Settings, ExternalLink } from "lucide-react";
+import RescanButton from "./RescanButton";
+import BranchPicker from "./BranchPicker";
 
 interface ArgoApplication {
   metadata: {
@@ -28,7 +30,13 @@ interface ArgoApplication {
   };
 }
 
-export default async function RepoPage({ params }: { params: Promise<{ repo: string }> }) {
+export default async function RepoPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ repo: string }>;
+  searchParams: Promise<{ branch?: string }>;
+}) {
   const session = await getServerSession(authOptions);
 
   if (!session) {
@@ -36,49 +44,55 @@ export default async function RepoPage({ params }: { params: Promise<{ repo: str
   }
 
   const { repo } = await params;
+  const { branch: branchParam } = await searchParams;
   const repoFullName = decodeURIComponent(repo);
   const provider = getGitProvider(session.accessToken as string, session.provider as string);
 
-  // 1. Scan repo for all files
-  const files = await provider.scanRepo(repoFullName);
+  // Fetch branches + scan repo in parallel
+  const [branches, files] = await Promise.all([
+    provider.listBranches(repoFullName),
+    provider.scanRepo(repoFullName, branchParam || undefined),
+  ]);
 
-  // 2. Filter for YAML files
+  const currentBranch = branchParam || branches[0] || "HEAD";
+
+  // Filter for YAML files
   const yamlFiles = files.filter(f => f.name.endsWith(".yaml") || f.name.endsWith(".yml"));
 
-  // 3. Fetch content and parse (limit to 20 for now to avoid hitting rate limits too hard in demo)
-  // In production, we'd want a more robust queuing system or search API usage if possible.
-const applications: { path: string; content: any }[] = [];
+  // Fetch all YAML files in parallel (capped at 30 to avoid rate limits)
+  const FILE_LIMIT = 30;
+  const contents = await Promise.all(
+    yamlFiles.slice(0, FILE_LIMIT).map(f => provider.getFile(repoFullName, f.path, currentBranch))
+  );
 
-  for (const file of yamlFiles.slice(0, 20)) {
+  const applications: { path: string; content: any }[] = [];
+  for (let i = 0; i < contents.length; i++) {
+    const content = contents[i];
+    if (!content) continue;
     try {
-        const content = await provider.getFile(repoFullName, file.path);
-        if (!content) continue;
-
-        // Parse multiple documents if present
-        const documents = yaml.loadAll(content) as any[];
-        
-        for (const doc of documents) {
-            if (doc && (doc.kind === "Application" || doc.kind === "ApplicationSet") && doc.apiVersion?.startsWith("argoproj.io")) {
-                applications.push({
-                    path: file.path,
-                    content: doc
-                });
-            }
+      const documents = yaml.loadAll(content) as any[];
+      for (const doc of documents) {
+        if (doc && (doc.kind === "Application" || doc.kind === "ApplicationSet") && doc.apiVersion?.startsWith("argoproj.io")) {
+          applications.push({ path: yamlFiles[i].path, content: doc });
         }
+      }
     } catch (e) {
-        console.error(`Error parsing ${file.path}`, e);
+      console.error(`Error parsing ${yamlFiles[i].path}`, e);
     }
   }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
        <header className="mb-10 max-w-7xl mx-auto border-b border-gray-800 pb-6">
-        <div className="flex items-center gap-4 mb-4">
-             <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors flex items-center gap-2">
-                <ArrowLeft className="w-4 h-4" />
-                Back to Dashboard
-             </Link>
-        </div>
+         <div className="flex items-center gap-3 mb-4">
+              <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-all duration-150 active:scale-95">
+                 <ArrowLeft className="w-4 h-4" />
+                 Back to Dashboard
+              </Link>
+              {branches.length > 0 && (
+                <BranchPicker branches={branches} currentBranch={currentBranch} />
+              )}
+         </div>
         <div className="flex justify-between items-center">
             <div>
             <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
@@ -87,16 +101,17 @@ const applications: { path: string; content: any }[] = [];
             <p className="text-gray-400 mt-2">ArgoCD Manifests</p>
             </div>
             <div className="flex gap-3">
+                <RescanButton />
                 <Link
                     href={`/dashboard/${encodeURIComponent(repoFullName)}/new-set`}
-                    className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-lg shadow-purple-600/20"
+                    className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white px-4 py-2 rounded-lg font-medium transition-all duration-150 shadow-lg shadow-purple-600/20"
                 >
                     <Plus className="w-4 h-4" />
                     New ApplicationSet
                 </Link>
                 <Link
                     href={`/dashboard/${encodeURIComponent(repoFullName)}/new`}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20"
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white px-4 py-2 rounded-lg font-medium transition-all duration-150 shadow-lg shadow-blue-600/20"
                 >
                     <Plus className="w-4 h-4" />
                     New Application
@@ -143,23 +158,40 @@ const applications: { path: string; content: any }[] = [];
                                     <span>Project:</span>
                                     <span className="text-gray-200">{app.content.spec?.project || app.content.spec?.template?.spec?.project}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span>Dest:</span>
-                                    <span className="text-gray-200">
-                                        {app.content.kind === 'ApplicationSet' 
-                                            ? `${app.content.spec?.generators?.length || 0} Generators`
-                                            : (app.content.spec?.destination?.name || 'Server')
-                                        }
-                                    </span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Namespace:</span>
-                                    <span className="text-gray-200">{app.content.spec?.destination?.namespace || app.content.spec?.template?.spec?.destination?.namespace}</span>
-                                </div>
+
+                                {app.content.kind === 'ApplicationSet' ? (
+                                    <>
+                                        <div className="flex justify-between">
+                                            <span>Generator:</span>
+                                            <span className="text-gray-200 capitalize">
+                                                {Object.keys(app.content.spec?.generators?.[0] || {})[0] || '—'}
+                                                {app.content.spec?.generators?.length > 1 && ` +${app.content.spec.generators.length - 1}`}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>Template namespace:</span>
+                                            <span className="text-gray-200">{app.content.spec?.template?.spec?.destination?.namespace || '—'}</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="flex justify-between">
+                                            <span>Cluster:</span>
+                                            <span className="text-gray-200">{app.content.spec?.destination?.name || app.content.spec?.destination?.server || '—'}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>Namespace:</span>
+                                            <span className="text-gray-200">{app.content.spec?.destination?.namespace || '—'}</span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
-                         <div className="bg-gray-900/50 px-6 py-3 border-t border-gray-700 text-xs font-mono text-gray-500 truncate">
-                            Src: {app.content.spec?.source?.repoURL || app.content.spec?.template?.spec?.source?.repoURL}
+                        <div className="bg-gray-900/50 px-6 py-3 border-t border-gray-700 text-xs font-mono text-gray-500 truncate">
+                            {app.content.kind === 'ApplicationSet'
+                                ? `${app.content.spec?.generators?.length || 0} generator(s) · ${app.content.spec?.template?.spec?.source?.repoURL || app.content.spec?.template?.spec?.sources?.[0]?.repoURL || '—'}`
+                                : `Src: ${app.content.spec?.source?.repoURL || app.content.spec?.sources?.[0]?.repoURL || '—'}`
+                            }
                         </div>
                     </div>
                 ))}

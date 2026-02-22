@@ -5,11 +5,12 @@ import { Gitlab } from "@gitbeaker/rest";
 
 export interface GitProvider {
   listRepos(): Promise<Repository[]>;
-  getFile(repo: string, path: string): Promise<string | null>;
+  listBranches(repo: string): Promise<string[]>;
+  getFile(repo: string, path: string, branch?: string): Promise<string | null>;
   saveFile(repo: string, path: string, content: string, message: string): Promise<void>;
   deleteFile(repo: string, path: string, message: string): Promise<void>;
   listFiles(repo: string, path?: string): Promise<FileEntry[]>;
-  scanRepo(repo: string): Promise<FileEntry[]>;
+  scanRepo(repo: string, branch?: string): Promise<FileEntry[]>;
 }
 
 export interface Repository {
@@ -54,13 +55,24 @@ class GitHubProvider implements GitProvider {
     }));
   }
 
-  async getFile(repo: string, path: string): Promise<string | null> {
+  async listBranches(repo: string): Promise<string[]> {
+    const [owner, name] = repo.split("/");
+    try {
+      const { data } = await this.octokit.repos.listBranches({ owner, repo: name, per_page: 100 });
+      return data.map((b) => b.name);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async getFile(repo: string, path: string, branch?: string): Promise<string | null> {
     try {
       const [owner, name] = repo.split("/");
       const { data } = await this.octokit.repos.getContent({
         owner,
         repo: name,
         path,
+        ...(branch ? { ref: branch } : {}),
       });
 
       if (Array.isArray(data) || !("content" in data)) {
@@ -142,13 +154,13 @@ class GitHubProvider implements GitProvider {
       }
   }
 
-  async scanRepo(repo: string): Promise<FileEntry[]> {
+  async scanRepo(repo: string, branch?: string): Promise<FileEntry[]> {
     const [owner, name] = repo.split("/");
     try {
       const { data } = await this.octokit.git.getTree({
         owner,
         repo: name,
-        tree_sha: "HEAD", // Scanning main/HEAD
+        tree_sha: branch || "HEAD",
         recursive: "true",
       });
 
@@ -191,9 +203,18 @@ class GitLabProvider implements GitProvider {
     }));
   }
 
-  async getFile(repo: string, path: string): Promise<string | null> {
+  async listBranches(repo: string): Promise<string[]> {
     try {
-      const file: any = await this.api.RepositoryFiles.show(repo, path, "main"); // Adapting to default branch later
+      const branches = await (this.api.Branches as any).all(repo);
+      return branches.map((b: any) => b.name);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async getFile(repo: string, path: string, branch?: string): Promise<string | null> {
+    try {
+      const file: any = await this.api.RepositoryFiles.show(repo, path, branch || "main");
       return Buffer.from(file.content, "base64").toString("utf-8");
     } catch (e) {
       return null;
@@ -225,9 +246,9 @@ class GitLabProvider implements GitProvider {
       }
   }
 
-  async scanRepo(repo: string): Promise<FileEntry[]> {
+  async scanRepo(repo: string, branch?: string): Promise<FileEntry[]> {
     try {
-      const items = await (this.api.Repositories as any).tree(repo, { recursive: true });
+      const items = await (this.api.Repositories as any).tree(repo, { recursive: true, ref: branch });
       return items
         .filter((item: any) => item.type === "blob")
         .map((item: any) => ({

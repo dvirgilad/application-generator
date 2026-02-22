@@ -32,9 +32,11 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
   });
 
   const [generatorType, setGeneratorType] = useState<"list" | "git">("list");
+  const [gitGeneratorMode, setGitGeneratorMode] = useState<"directories" | "files">("directories");
   const [clusters, setClusters] = useState<{ name: string }[]>([
     { name: "in-cluster" },
   ]);
+  const [inlineValues, setInlineValues] = useState<string>("");
   const [valueFiles, setValueFiles] = useState<string[]>([]);
 
   const addCluster = () => {
@@ -101,9 +103,9 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
                 git: {
                     repoURL: formData.gitRepoURL,
                     revision: formData.gitRevision,
-                    directories: [
-                        { path: formData.gitPath }
-                    ]
+                    ...(gitGeneratorMode === "directories"
+                        ? { directories: [{ path: formData.gitPath }] }
+                        : { files: [{ path: formData.gitPath }] }),
                 }
             }
         ]
@@ -128,8 +130,9 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
                 repoURL: formData.repoURL,
                 path: formData.path,
                 targetRevision: formData.targetRevision,
-                helm: valueFiles.length > 0 ? {
-                    valueFiles: valueFiles
+                helm: (inlineValues || valueFiles.length > 0) ? {
+                    ...(inlineValues ? { values: inlineValues } : {}),
+                    ...(valueFiles.length > 0 ? { valueFiles } : {}),
                 } : undefined
               },
               destination: {
@@ -160,7 +163,7 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl bg-gray-800 p-8 rounded-xl border border-gray-700">
+    <form onSubmit={handleSubmit} className="w-full space-y-6 max-w-2xl bg-gray-800 p-8 rounded-xl border border-gray-700">
       
       {error && (
         <div className="bg-red-500/10 border border-red-500 text-red-500 p-4 rounded-lg">
@@ -250,7 +253,39 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
                 </>
             ) : (
                 <>
-                    <p className="text-sm text-gray-400 mb-4">Scan a Git repository for directories.</p>
+                    <p className="text-sm text-gray-400 mb-4">Scan a Git repository for directories or config files.</p>
+
+                    {/* File vs Directory sub-toggle */}
+                    <div className="flex gap-2 mb-4">
+                        <button
+                            type="button"
+                            onClick={() => setGitGeneratorMode("directories")}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                gitGeneratorMode === "directories"
+                                    ? "bg-blue-600/30 text-blue-300 border border-blue-500/50"
+                                    : "bg-gray-700/50 text-gray-400 hover:text-white border border-transparent"
+                            }`}
+                        >
+                            Directories
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setGitGeneratorMode("files")}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                gitGeneratorMode === "files"
+                                    ? "bg-blue-600/30 text-blue-300 border border-blue-500/50"
+                                    : "bg-gray-700/50 text-gray-400 hover:text-white border border-transparent"
+                            }`}
+                        >
+                            Files
+                        </button>
+                    </div>
+                    {gitGeneratorMode === "directories" ? (
+                        <p className="text-xs text-gray-500 mb-4">Creates one Application per matching directory. Uses <code className="bg-gray-800 px-1 rounded">{'{{path.basename}}'}</code> as the app name.</p>
+                    ) : (
+                        <p className="text-xs text-gray-500 mb-4">Creates one Application per matching config file. Uses <code className="bg-gray-800 px-1 rounded">{'{{path.basename}}'}</code> as the app name.</p>
+                    )}
+
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-400 mb-2">Git Repo URL</label>
@@ -275,13 +310,15 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
                                 />
                             </div>
                              <div>
-                                <label className="block text-sm font-medium text-gray-400 mb-2">Path (Wildcard)</label>
+                                <label className="block text-sm font-medium text-gray-400 mb-2">
+                                    {gitGeneratorMode === "directories" ? "Directory Pattern" : "File Pattern"}
+                                </label>
                                 <input
                                     type="text"
                                     value={formData.gitPath}
                                     onChange={(e) => setFormData({ ...formData, gitPath: e.target.value })}
                                     className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="clusters/*"
+                                    placeholder={gitGeneratorMode === "directories" ? "clusters/*" : "**/config.json"}
                                 />
                             </div>
                          </div>
@@ -352,7 +389,20 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
                 </div>
                 
                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Helm Values Files</label>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Inline Values (YAML)</label>
+                    <textarea
+                        rows={8}
+                        value={inlineValues}
+                        onChange={(e) => setInlineValues(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-y"
+                        placeholder={`replicaCount: 1\nimage:\n  tag: latest`}
+                        spellCheck={false}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Helm values in YAML format, inlined into the manifest.</p>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Values File Sources</label>
                     <div className="space-y-3">
                         {valueFiles.map((file, index) => (
                             <div key={index} className="flex gap-2">
@@ -361,7 +411,7 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
                                     value={file}
                                     onChange={(e) => updateValueFile(index, e.target.value)}
                                     className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                    placeholder="values.yaml"
+                                    placeholder="values.yaml or https://example.com/values.yaml"
                                 />
                                 <button
                                     type="button"
@@ -419,7 +469,7 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
              <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-all duration-200"
+                className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-500 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-150"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                 Create ApplicationSet
