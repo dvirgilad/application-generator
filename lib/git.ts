@@ -194,7 +194,14 @@ class GitLabProvider implements GitProvider {
   }
 
   async listRepos(): Promise<Repository[]> {
-    const repos = await this.api.Projects.all({ membership: true, sort: 'desc', orderBy: 'updated_at' });
+    // Fetch only the first page (20 repos) sorted by recent activity to avoid fetching all repos
+    const repos = await this.api.Projects.all({
+      membership: true,
+      sort: 'desc',
+      orderBy: 'updated_at',
+      perPage: 20,
+      maxPages: 1,
+    });
     return repos.map((repo: any) => ({
       name: repo.name,
       fullName: repo.path_with_namespace,
@@ -235,8 +242,8 @@ class GitLabProvider implements GitProvider {
 
   async listFiles(repo: string, path: string = ""): Promise<FileEntry[]> {
       try {
-          const items = await (this.api.Repositories as any).tree(repo, { path });
-          return items.map((item: any) => ({
+          const items = await this.api.Repositories.allRepositoryTrees(repo, { path, perPage: 100 });
+          return (items as any[]).map((item: any) => ({
               name: item.name,
               path: item.path,
               type: item.type === "tree" ? "dir" : "file"
@@ -248,8 +255,30 @@ class GitLabProvider implements GitProvider {
 
   async scanRepo(repo: string, branch?: string): Promise<FileEntry[]> {
     try {
-      const items = await (this.api.Repositories as any).tree(repo, { recursive: true, ref: branch });
-      return items
+      // Use keyset pagination to iterate through all tree pages for large repos
+      const allItems: any[] = [];
+      let pageToken: string | undefined;
+
+      while (true) {
+        const result = await this.api.Repositories.allRepositoryTrees(repo, {
+          recursive: true,
+          perPage: 100,
+          pagination: 'keyset',
+          showExpanded: true,
+          ...(branch ? { ref: branch } : {}),
+          ...(pageToken ? { pageToken } : {}),
+        } as any);
+
+        const { data, paginationInfo } = result as any;
+        const page = Array.isArray(data) ? data : Array.isArray(result) ? result : [];
+        allItems.push(...page);
+
+        const nextToken = paginationInfo?.next;
+        if (!nextToken) break;
+        pageToken = nextToken;
+      }
+
+      return allItems
         .filter((item: any) => item.type === "blob")
         .map((item: any) => ({
           name: item.name,
