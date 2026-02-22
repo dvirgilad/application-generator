@@ -83,3 +83,4 @@ auth:
   gitlab:
     id: ""
     secret: ""
+    insecure: false

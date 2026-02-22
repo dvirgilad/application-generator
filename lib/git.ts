@@ -1,4 +1,5 @@
 
+import https from "https";
 import { Octokit } from "@octokit/rest";
 import { Gitlab } from "@gitbeaker/rest";
 
@@ -168,9 +169,15 @@ class GitLabProvider implements GitProvider {
   private api: InstanceType<typeof Gitlab>;
 
   constructor(token: string) {
+    const insecure = process.env.GITLAB_INSECURE === "true";
     this.api = new Gitlab({
       oauthToken: token,
       host: process.env.GITLAB_BASE_URL || "https://gitlab.com",
+      ...(insecure && {
+        requestOptions: {
+          agent: new https.Agent({ rejectUnauthorized: false }),
+        },
+      }),
     });
   }
 
