@@ -291,7 +291,7 @@ class GitLabProvider implements GitProvider {
           recursive: true,
           perPage: 100,
           showExpanded: true,
-          pagination: 'offset',
+          pagination: 'keyset',
           page: currentPage,
           ...(branch ? { ref: branch } : {}),
         } as any);
