@@ -4,11 +4,11 @@ import { Octokit } from "@octokit/rest";
 import { Gitlab } from "@gitbeaker/rest";
 
 export interface GitProvider {
-  listRepos(): Promise<Repository[]>;
+  listRepos(pageCursor?: string): Promise<{ repos: Repository[]; nextCursor?: string }>;
   listBranches(repo: string): Promise<string[]>;
   getFile(repo: string, path: string, branch?: string): Promise<string | null>;
-  saveFile(repo: string, path: string, content: string, message: string): Promise<void>;
-  deleteFile(repo: string, path: string, message: string): Promise<void>;
+  saveFile(repo: string, path: string, content: string, message: string, branch?: string): Promise<void>;
+  deleteFile(repo: string, path: string, message: string, branch?: string): Promise<void>;
   listFiles(repo: string, path?: string): Promise<FileEntry[]>;
   scanRepo(repo: string, branch?: string): Promise<FileEntry[]>;
 }
@@ -42,17 +42,29 @@ class GitHubProvider implements GitProvider {
     this.octokit = new Octokit({ auth: token });
   }
 
-  async listRepos(): Promise<Repository[]> {
-    const { data } = await this.octokit.repos.listForAuthenticatedUser({
+  async listRepos(pageCursor?: string): Promise<{ repos: Repository[]; nextCursor?: string }> {
+    const page = pageCursor ? parseInt(pageCursor, 10) : 1;
+    const { data, headers } = await this.octokit.repos.listForAuthenticatedUser({
       sort: "updated",
-      per_page: 100,
+      per_page: 30, // Default page size
+      page,
     });
-    return data.map((repo) => ({
+    
+    // Check for 'next' link in headers
+    const linkHeader = headers.link || "";
+    const hasNext = linkHeader.includes('rel="next"');
+    
+    const repos = data.map((repo) => ({
       name: repo.name,
       fullName: repo.full_name,
       url: repo.html_url,
       defaultBranch: repo.default_branch,
     }));
+    
+    return {
+      repos,
+      nextCursor: hasNext ? (page + 1).toString() : undefined,
+    };
   }
 
   async listBranches(repo: string): Promise<string[]> {
@@ -85,7 +97,7 @@ class GitHubProvider implements GitProvider {
     }
   }
 
-  async saveFile(repo: string, path: string, content: string, message: string): Promise<void> {
+  async saveFile(repo: string, path: string, content: string, message: string, branch?: string): Promise<void> {
     const [owner, name] = repo.split("/");
     let sha: string | undefined;
 
@@ -94,6 +106,7 @@ class GitHubProvider implements GitProvider {
         owner,
         repo: name,
         path,
+        ...(branch ? { ref: branch } : {}),
       });
       if (!Array.isArray(data) && "sha" in data) {
         sha = data.sha;
@@ -109,15 +122,17 @@ class GitHubProvider implements GitProvider {
       message,
       content: Buffer.from(content).toString("base64"),
       sha,
+      ...(branch ? { branch } : {}),
     });
   }
 
-  async deleteFile(repo: string, path: string, message: string): Promise<void> {
+  async deleteFile(repo: string, path: string, message: string, branch?: string): Promise<void> {
     const [owner, name] = repo.split("/");
     const { data } = await this.octokit.repos.getContent({
       owner,
       repo: name,
       path,
+      ...(branch ? { ref: branch } : {}),
     });
 
     if (!Array.isArray(data) && "sha" in data) {
@@ -127,6 +142,7 @@ class GitHubProvider implements GitProvider {
         path,
         message,
         sha: data.sha,
+        ...(branch ? { branch } : {}),
       });
     }
   }
@@ -193,21 +209,31 @@ class GitLabProvider implements GitProvider {
     });
   }
 
-  async listRepos(): Promise<Repository[]> {
-    // Fetch only the first page (20 repos) sorted by recent activity to avoid fetching all repos
-    const repos = await this.api.Projects.all({
+  async listRepos(pageCursor?: string): Promise<{ repos: Repository[]; nextCursor?: string }> {
+    const response: any = await this.api.Projects.all({
       membership: true,
       sort: 'desc',
       orderBy: 'updated_at',
-      perPage: 20,
-      maxPages: 1,
+      perPage: 30,
+      pagination: 'keyset',
+      ...(pageCursor ? { pageToken: pageCursor } : {}),
+      showExpanded: true,
     });
-    return repos.map((repo: any) => ({
+
+    const repos = Array.isArray(response.data) ? response.data : Array.isArray(response) ? response : [];
+    const nextCursor = response.paginationInfo?.next;
+
+    const mappedRepos = repos.map((repo: any) => ({
       name: repo.name,
       fullName: repo.path_with_namespace,
       url: repo.web_url,
       defaultBranch: repo.default_branch,
     }));
+
+    return {
+      repos: mappedRepos,
+      nextCursor,
+    };
   }
 
   async listBranches(repo: string): Promise<string[]> {
@@ -228,16 +254,16 @@ class GitLabProvider implements GitProvider {
     }
   }
 
-  async saveFile(repo: string, path: string, content: string, message: string): Promise<void> {
+  async saveFile(repo: string, path: string, content: string, message: string, branch?: string): Promise<void> {
     try {
-      await this.api.RepositoryFiles.edit(repo, path, "main", content, message);
+      await this.api.RepositoryFiles.edit(repo, path, branch || "main", content, message);
     } catch (e) {
-      await this.api.RepositoryFiles.create(repo, path, "main", content, message);
+      await this.api.RepositoryFiles.create(repo, path, branch || "main", content, message);
     }
   }
 
-  async deleteFile(repo: string, path: string, message: string): Promise<void> {
-    await this.api.RepositoryFiles.remove(repo, path, "main", message);
+  async deleteFile(repo: string, path: string, message: string, branch?: string): Promise<void> {
+    await this.api.RepositoryFiles.remove(repo, path, branch || "main", message);
   }
 
   async listFiles(repo: string, path: string = ""): Promise<FileEntry[]> {

@@ -9,7 +9,7 @@ export default function BranchPicker({
   currentBranch,
 }: {
   branches: string[];
-  currentBranch: string;
+  currentBranch?: string;
 }) {
   const router = useRouter();
   const params = useParams<{ repo: string }>();
@@ -33,7 +33,7 @@ export default function BranchPicker({
         className={`inline-flex items-center gap-2 text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg transition-all duration-150 active:scale-95 ${isPending ? "opacity-60" : ""}`}
       >
         <GitBranch className="w-3.5 h-3.5 text-gray-400" />
-        <span className="max-w-[140px] truncate">{currentBranch}</span>
+        <span className="max-w-[140px] truncate">{currentBranch || "Default"}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 

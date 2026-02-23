@@ -11,9 +11,10 @@ interface ApplicationFormProps {
   initialData?: any;
   initialPath?: string;
   isNew?: boolean;
+  branch?: string;
 }
 
-export default function ApplicationForm({ repo, initialData, initialPath, isNew = false }: ApplicationFormProps) {
+export default function ApplicationForm({ repo, initialData, initialPath, isNew = false, branch }: ApplicationFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,8 +128,8 @@ export default function ApplicationForm({ repo, initialData, initialPath, isNew 
         };
       }
 
-      await saveApplication(repo, formData.filePath, appManifest, isNew);
-      router.push(`/dashboard/${encodeURIComponent(repo)}`);
+      await saveApplication(repo, formData.filePath, appManifest, isNew, undefined, branch);
+      router.push(`/dashboard/${encodeURIComponent(repo)}${branch ? `?branch=${encodeURIComponent(branch)}` : ""}`);
     } catch (err: any) {
       setError(err.message || "Failed to save application");
     } finally {

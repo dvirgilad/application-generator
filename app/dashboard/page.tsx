@@ -13,7 +13,7 @@ export default async function Dashboard() {
   }
 
   const provider = getGitProvider(session.accessToken as string, session.provider as string);
-  const repos = await provider.listRepos();
+  const { repos, nextCursor } = await provider.listRepos();
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
@@ -34,7 +34,7 @@ export default async function Dashboard() {
         </div>
       </header>
 
-      <RepoList repos={repos} />
+      <RepoList initialRepos={repos} initialNextCursor={nextCursor} />
     </div>
   );
 }

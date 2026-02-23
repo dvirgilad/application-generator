@@ -8,6 +8,7 @@ import yaml from "js-yaml";
 import { Plus, ArrowLeft, Settings, ExternalLink } from "lucide-react";
 import RescanButton from "./RescanButton";
 import BranchPicker from "./BranchPicker";
+import DeleteAction from "@/components/DeleteAction";
 
 interface ArgoApplication {
   metadata: {
@@ -84,24 +85,26 @@ export default async function RepoPage({
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
        <header className="mb-10 max-w-7xl mx-auto border-b border-gray-800 pb-6">
-         <div className="flex items-center gap-3 mb-4">
+         <div className="mb-4">
               <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-all duration-150 active:scale-95">
                  <ArrowLeft className="w-4 h-4" />
                  Back to Dashboard
               </Link>
-              {branches.length > 0 && (
-                <BranchPicker branches={branches} currentBranch={currentBranch} />
-              )}
          </div>
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-start">
             <div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
-                {repoFullName}
-            </h1>
-            <p className="text-gray-400 mt-2">ArgoCD Manifests</p>
+                <div className="flex items-center gap-4">
+                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                        {repoFullName}
+                    </h1>
+                    {branches.length > 0 && (
+                        <BranchPicker currentBranch={branchParam} branches={branches} />
+                    )}
+                </div>
+                <p className="text-gray-400 mt-2">ArgoCD Manifests</p>
             </div>
             <div className="flex gap-3">
-                <RescanButton />
+                <RescanButton repo={repoFullName} />
                 <Link
                     href={`/dashboard/${encodeURIComponent(repoFullName)}/new-set`}
                     className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 active:scale-95 text-white px-4 py-2 rounded-lg font-medium transition-all duration-150 shadow-lg shadow-purple-600/20"
@@ -135,14 +138,20 @@ export default async function RepoPage({
                                 <div className={`p-2 rounded-lg ${app.content.kind === 'ApplicationSet' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}`}>
                                     <ExternalLink className="w-6 h-6" />
                                 </div>
-                                <div className="flex gap-2">
-                                     <span className={`text-xs px-2 py-1 rounded-full border ${app.content.kind === 'ApplicationSet' ? 'border-purple-500/30 text-purple-400' : 'border-blue-500/30 text-blue-400'}`}>
+                                <div className="flex items-center gap-2">
+                                     <span className={`flex items-center h-6 text-xs px-2 rounded-full border ${app.content.kind === 'ApplicationSet' ? 'border-purple-500/30 text-purple-400' : 'border-blue-500/30 text-blue-400'}`}>
                                         {app.content.kind}
                                      </span>
-                                     {/* Edit/Delete would go here. For now, links. */}
-                                    <Link href={`/dashboard/${encodeURIComponent(repoFullName)}/edit?path=${encodeURIComponent(app.path)}`} className="text-gray-500 hover:text-white">
+                                    <Link href={`/dashboard/${encodeURIComponent(repoFullName)}/edit?path=${encodeURIComponent(app.path)}`} className="flex items-center justify-center h-6 w-6 text-gray-500 hover:text-white" title="Edit">
                                         <Settings className="w-4 h-4" />
                                     </Link>
+                                    <DeleteAction 
+                                        repo={repoFullName} 
+                                        path={app.path} 
+                                        isAppSet={app.content.kind === 'ApplicationSet'} 
+                                        appName={app.content.metadata.name} 
+                                        branch={branchParam || undefined}
+                                    />
                                 </div>
                             </div>
                             

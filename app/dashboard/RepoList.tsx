@@ -1,15 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { GitBranch, FolderGit2, Search, ChevronDown } from "lucide-react";
+import { GitBranch, FolderGit2, Search, ChevronDown, Loader2 } from "lucide-react";
 import type { Repository } from "@/lib/git";
+import { fetchMoreRepos } from "@/app/actions";
 
 const PAGE_SIZE = 30;
 
-export default function RepoList({ repos }: { repos: Repository[] }) {
+export default function RepoList({ initialRepos, initialNextCursor }: { initialRepos: Repository[], initialNextCursor?: string }) {
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [repos, setRepos] = useState(initialRepos);
+  const [nextCursor, setNextCursor] = useState(initialNextCursor);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadMore = async () => {
+      if (!nextCursor || isLoadingMore) return;
+      setIsLoadingMore(true);
+      try {
+        const { repos: newRepos, nextCursor: newCursor } = await fetchMoreRepos(nextCursor);
+        if (mounted) {
+          setRepos(prev => {
+            const existingNames = new Set(prev.map(r => r.fullName));
+            const uniqueNewRepos = newRepos.filter(r => !existingNames.has(r.fullName));
+            return [...prev, ...uniqueNewRepos];
+          });
+          setNextCursor(newCursor);
+        }
+      } catch (error) {
+        console.error("Failed to fetch more repos", error);
+      } finally {
+        if (mounted) setIsLoadingMore(false);
+      }
+    };
+
+    if (nextCursor && !isLoadingMore) {
+        loadMore();
+    }
+
+    return () => { mounted = false; };
+  }, [nextCursor, isLoadingMore]);
 
   const filtered = repos.filter(
     (r) =>

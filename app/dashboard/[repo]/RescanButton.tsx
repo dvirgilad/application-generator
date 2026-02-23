@@ -3,15 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { rescanRepo } from "@/app/actions";
 
-export default function RescanButton() {
+export default function RescanButton({ repo }: { repo: string }) {
   const router = useRouter();
   const [scanning, setScanning] = useState(false);
 
   const handleRescan = async () => {
     setScanning(true);
+    await rescanRepo(repo);
     router.refresh();
-    setTimeout(() => setScanning(false), 1500);
+    setTimeout(() => setScanning(false), 500);
   };
 
   return (

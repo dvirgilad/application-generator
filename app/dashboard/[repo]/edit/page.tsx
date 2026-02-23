@@ -13,7 +13,7 @@ export default async function EditAppPage({
   searchParams,
 }: {
   params: Promise<{ repo: string }>;
-  searchParams: Promise<{ path: string }>;
+  searchParams: Promise<{ path: string; branch?: string }>;
 }) {
   const session = await getServerSession(authOptions);
 
@@ -22,7 +22,7 @@ export default async function EditAppPage({
   }
 
   const { repo } = await params;
-  const { path: filePath } = await searchParams;
+  const { path: filePath, branch: branchParam } = await searchParams;
   const repoFullName = decodeURIComponent(repo);
 
   if (!filePath) {
@@ -30,7 +30,7 @@ export default async function EditAppPage({
   }
 
   const provider = getGitProvider(session.accessToken as string, session.provider as string);
-  const content = await provider.getFile(repoFullName, filePath);
+  const content = await provider.getFile(repoFullName, filePath, branchParam);
 
   if (!content) {
     return <div>File not found</div>;
@@ -49,7 +49,7 @@ export default async function EditAppPage({
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <header className="mb-10 max-w-7xl mx-auto border-b border-gray-800 pb-6">
         <Link
-          href={`/dashboard/${encodeURIComponent(repoFullName)}`}
+          href={`/dashboard/${encodeURIComponent(repoFullName)}${branchParam ? `?branch=${encodeURIComponent(branchParam)}` : ""}`}
           className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-all duration-150 active:scale-95 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -66,6 +66,7 @@ export default async function EditAppPage({
           isNew={false}
           initialData={initialData}
           initialPath={filePath}
+          branch={branchParam || undefined}
         />
       </main>
     </div>

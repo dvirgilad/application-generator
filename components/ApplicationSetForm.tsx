@@ -3,16 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveApplication } from "@/app/actions"; // We can reuse this as it's generic
-import { Loader2, Save, Plus, Trash2 } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, GitCommit, AlertTriangle } from "lucide-react";
 
 interface ApplicationSetFormProps {
   repo: string;
+  branch?: string;
 }
 
-export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
+export default function ApplicationSetForm({ repo, branch }: ApplicationSetFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [showCommitModal, setShowCommitModal] = useState(false);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [pendingManifest, setPendingManifest] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -153,8 +158,24 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
         };
       }
 
-      await saveApplication(repo, formData.filePath, appSetManifest, true);
-      router.push(`/dashboard/${encodeURIComponent(repo)}`);
+      setPendingManifest(appSetManifest);
+      setCommitMessage(`Create ApplicationSet ${formData.name}`);
+      setShowCommitModal(true);
+    } catch (err: any) {
+      setError(err.message || "Failed to prepare ApplicationSet");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmSave = async () => {
+    if (!pendingManifest) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await saveApplication(repo, formData.filePath, pendingManifest, true, commitMessage, branch);
+      setShowCommitModal(false);
+      router.push(`/dashboard/${encodeURIComponent(repo)}${branch ? `?branch=${encodeURIComponent(branch)}` : ""}`);
     } catch (err: any) {
       setError(err.message || "Failed to save ApplicationSet");
     } finally {
@@ -163,7 +184,8 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full space-y-6 max-w-2xl bg-gray-800 p-8 rounded-xl border border-gray-700">
+    <>
+      <form onSubmit={handleSubmit} className="w-full space-y-6 max-w-2xl bg-gray-800 p-8 rounded-xl border border-gray-700">
       
       {error && (
         <div className="bg-red-500/10 border border-red-500 text-red-500 p-4 rounded-lg">
@@ -478,5 +500,52 @@ export default function ApplicationSetForm({ repo }: ApplicationSetFormProps) {
 
       </div>
     </form>
+
+    {showCommitModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4 text-white">
+              <GitCommit className="w-6 h-6 text-blue-400" />
+              <h2 className="text-xl font-bold">Commit ApplicationSet</h2>
+            </div>
+            
+            <p className="text-gray-300 mb-6 text-sm">
+              Review your commit message before saving this ApplicationSet to the repository.
+            </p>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-400 mb-2">Commit Message</label>
+              <input
+                type="text"
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCommitModal(false)}
+                disabled={loading}
+                className="px-4 py-2 rounded-lg font-medium text-gray-300 hover:text-white bg-gray-700 hover:bg-gray-600 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSave}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-500 transition-colors disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Confirm & Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
