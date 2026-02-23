@@ -210,18 +210,19 @@ class GitLabProvider implements GitProvider {
   }
 
   async listRepos(pageCursor?: string): Promise<{ repos: Repository[]; nextCursor?: string }> {
+    const page = pageCursor ? parseInt(pageCursor, 10) : 1;
     const response: any = await this.api.Projects.all({
       membership: true,
       sort: 'desc',
       orderBy: 'updated_at',
       perPage: 30,
-      pagination: 'keyset',
-      ...(pageCursor ? { pageToken: pageCursor } : {}),
+      pagination: 'offset',
+      page,
       showExpanded: true,
     });
 
     const repos = Array.isArray(response.data) ? response.data : Array.isArray(response) ? response : [];
-    const nextCursor = response.paginationInfo?.next;
+    const nextCursor = response.paginationInfo?.next?.toString();
 
     const mappedRepos = repos.map((repo: any) => ({
       name: repo.name,
@@ -281,27 +282,27 @@ class GitLabProvider implements GitProvider {
 
   async scanRepo(repo: string, branch?: string): Promise<FileEntry[]> {
     try {
-      // Use keyset pagination to iterate through all tree pages for large repos
+      // Use offset pagination to iterate through all tree pages for large repos
       const allItems: any[] = [];
-      let pageToken: string | undefined;
+      let currentPage = 1;
 
       while (true) {
         const result = await this.api.Repositories.allRepositoryTrees(repo, {
           recursive: true,
           perPage: 100,
-          pagination: 'keyset',
           showExpanded: true,
+          pagination: 'offset',
+          page: currentPage,
           ...(branch ? { ref: branch } : {}),
-          ...(pageToken ? { pageToken } : {}),
         } as any);
 
         const { data, paginationInfo } = result as any;
         const page = Array.isArray(data) ? data : Array.isArray(result) ? result : [];
         allItems.push(...page);
 
-        const nextToken = paginationInfo?.next;
-        if (!nextToken) break;
-        pageToken = nextToken;
+        const nextPage = paginationInfo?.next;
+        if (!nextPage) break;
+        currentPage = nextPage;
       }
 
       return allItems
